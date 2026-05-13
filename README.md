@@ -21,6 +21,7 @@
 ## Структура
 - `backend/` — Next.js API (`src/app/api/v1/*`, `src/lib/*`, Prisma schema).
 - `frontend/` — React + Vite SPA.
+- `e2e/` — Playwright end-to-end тесты. См. [e2e/README.md](e2e/README.md).
 - `docker-compose.yml` — db + backend + frontend.
 
 ## Запуск через Docker
@@ -68,6 +69,21 @@ npm run dev           # http://localhost:5173, проксирует /api → 800
 - `PATCH /api/v1/tasks/{id}`.
 - `DELETE /api/v1/tasks/{id}`.
 - `GET  /api/v1/tasks/{id}/history`.
+
+## E2E-тесты
+
+Полный сценарий через настоящий браузер: регистрация, CRUD задач, фильтры, тема. Лежат в [e2e/](e2e/).
+
+```sh
+cd e2e
+npm install
+npx playwright install chromium
+npx playwright test              # обычный прогон
+npx playwright test --ui         # интерактивный режим с таймлайном и watch
+npx playwright show-report       # HTML-отчёт с trace/видео
+```
+
+Подробности и как дебажить — в [e2e/README.md](e2e/README.md).
 
 ## Безопасность
 - Пароли — `bcryptjs` (12 раундов).
