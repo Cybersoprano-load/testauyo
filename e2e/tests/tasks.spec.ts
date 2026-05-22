@@ -72,6 +72,50 @@ test.describe("tasks", () => {
     await expect(page.getByText("Старое название")).toHaveCount(0);
   });
 
+  test("сортировка по сроку: переключатель меняет порядок", async ({ page }) => {
+    for (const [title, due] of [
+      ["Бета", 5],
+      ["Альфа", 1],
+      ["Гамма", 10],
+    ] as const) {
+      await page.getByLabel("Что нужно сделать").fill(title);
+      await page.getByLabel("Срок").fill(isoInDays(due));
+      await page.getByRole("button", { name: "Добавить" }).click();
+      await expect(page.locator(".task-item", { hasText: title })).toBeVisible();
+    }
+
+    const titles = page.locator(".task-item .task-title");
+    await expect(titles).toHaveText(["Альфа", "Бета", "Гамма"]);
+
+    await page.getByLabel("Изменить направление сортировки").click();
+    await expect(titles).toHaveText(["Гамма", "Бета", "Альфа"]);
+  });
+
+  test("статистика отражает каскад: всего/активные/просрочено/выполнено", async ({ page }) => {
+    const addTask = async (title: string, due: number) => {
+      await page.getByLabel("Что нужно сделать").fill(title);
+      await page.getByLabel("Срок").fill(isoInDays(due));
+      await page.getByRole("button", { name: "Добавить" }).click();
+      await expect(page.locator(".task-item", { hasText: title })).toBeVisible();
+    };
+
+    await addTask("Активная", 5);
+    await addTask("Просроченная", -3);
+    await addTask("Выполненная", 2);
+
+    await page
+      .locator(".task-item", { hasText: "Выполненная" })
+      .locator(".task-checkbox")
+      .click();
+    await expect(page.locator(".task-item", { hasText: "Выполненная" })).toHaveClass(/done/);
+
+    const stat = (name: string) => page.locator(".stat", { hasText: name }).locator(".value");
+    await expect(stat("всего")).toHaveText("3");
+    await expect(stat("активные")).toHaveText("2");
+    await expect(stat("просрочено")).toHaveText("1");
+    await expect(stat("выполнено")).toHaveText("1");
+  });
+
   test("удаление задачи", async ({ page }) => {
     await page.getByLabel("Что нужно сделать").fill("Удалить меня");
     await page.getByLabel("Срок").fill(isoInDays(1));
