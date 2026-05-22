@@ -95,8 +95,9 @@ e2e/
 ├── playwright.config.ts        ← конфиг (baseURL, retries, reporter)
 ├── tests/
 │   ├── auth.spec.ts            ← регистрация, логин, logout
-│   ├── tasks.spec.ts           ← CRUD задач
-│   └── theme.spec.ts           ← переключатель темы
+│   ├── tasks.spec.ts           ← CRUD, фильтры, сортировка, статистика
+│   ├── theme.spec.ts           ← переключатель темы
+│   └── validation.spec.ts      ← негативные сценарии форм
 └── support/
     └── user.ts                 ← хелперы: makeTestUser, registerViaUi
 ```
@@ -114,6 +115,7 @@ docker compose exec db psql -U todo -d todo -c "DELETE FROM users WHERE email LI
 |---|---|
 | `locator.click: Test timeout of 30000ms exceeded` | Элемент не появился за 30 секунд. Скорее всего селектор не находит элемент — открыть trace и в Snapshot посмотреть, что было на странице. |
 | `Clicking the checkbox did not change its state` | Чекбокс — controlled-input, состояние обновляется асинхронно. Использовать `.click()` + `await expect(...).toBeChecked()`. |
+| Несколько `addTask`, статистика «всего» меньше ожидаемого | Гонка: после клика «Добавить» форма очищается, **но мутация TanStack Query ещё в полёте**. Между добавлениями обязательно ждать появления карточки: `await expect(page.locator(".task-item", { hasText: title })).toBeVisible();` |
 | `expect(received).toBeVisible()` | Элемент **есть в DOM**, но не виден (display:none / opacity:0 / за границей окна). |
 | `expect(received).toHaveText('X')` Received: `'Y'` | Текст не совпадает — может быть проблема локализации, лишних пробелов, или асинхронной отрисовки. |
 
