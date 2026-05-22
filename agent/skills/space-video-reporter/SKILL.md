@@ -1,35 +1,63 @@
 ---
 name: space-video-reporter
 description: |
-  Use this skill to build a space-themed video report (MP4) with Russian voiceover
-  from a JSON manifest of slides. Each slide is one of: launch (rocket takes off),
-  starfield (cosmic background with text), planet (planet hero shot), crash
-  (used to report a bug, problem, or failure — explosion + red shake), rescue
-  (used to show a fix or recovery — calm rocket + green planet). Procedurally
-  generates frames with PIL/numpy and composites them with ffmpeg. Voiceover is
-  macOS `say` (no API keys needed). Output runs ~15s per slide, so an 8-slide
-  manifest gives ~2 minutes.
-  TRIGGER when the user asks for "видеоотчёт", "космическое видео", "сделай ролик",
-  "video report", "report as a video", "отчёт в виде видео", or wants a multimedia
-  summary of work done (especially when bugs were found and fixed — those map
-  cleanly to crash/rescue scenes).
+  Use this skill to build a fully animated space-themed video report (MP4) with
+  a natural-sounding Russian voiceover (Piper TTS) from a JSON manifest of
+  slides. Each slide is one of: launch (rocket lifts off with smoke trail and
+  rumble), starfield (parallax stars with text), planet (rotating planet hero
+  shot), crash (used to report a bug or failure — rotating red planet, shake,
+  flash, expanding particle explosion, boom SFX), rescue (used to show a fix
+  or recovery — rocket flies across to a green planet, triumphant chime).
+  All visuals are rendered per-frame with PIL + numpy (no slideshow): parallax
+  starfields drift, planets rotate, rockets fly with smoke particles, explosions
+  expand with gravity. Audio mixes narration + scene SFX + ambient music bed.
+
+  TRIGGER when the user asks for "видеоотчёт", "космическое видео", "сделай
+  ролик", "report as a video", "отчёт в виде видео", or wants a multimedia
+  summary of work done — especially when bugs were found and fixed, which map
+  cleanly to crash → rescue scenes.
 ---
 
 # space-video-reporter
 
-Скилл собирает MP4-видеоотчёт со звуком на космическую тематику. Все ассеты генерируются процедурно (звёздное небо, планеты с шумом Перлина, ракета, взрыв) — никаких внешних API не нужно. Голос — встроенный macOS `say -v Milena`.
+Скилл собирает **полностью анимированный** MP4-отчёт со звуком на космическую тематику:
+
+- **Голос** — [Piper TTS](https://github.com/rhasspy/piper) (локальный нейронный TTS, MIT, без API). Русский голос `ru_RU-irina-medium` — звучит близко к живому.
+- **Картинка** — покадровая процедурная анимация (PIL + numpy):
+  - параллакс из трёх слоёв звёзд с разной скоростью,
+  - планеты с цилиндрической текстурой и UV-вращением,
+  - ракета — sprite с per-frame пламенем + дым из частиц с гравитацией,
+  - взрыв — 900 частиц, расходящихся радиально с гравитацией.
+- **Звуковое оформление** — ffmpeg lavfi: rumble + chirp whoosh при запуске, boom + crackle при крушении, многоголосый chime при спасении, ambient drone для нейтральных сцен.
 
 ## Когда применять
 
-- Пользователь просит «прислать отчёт в виде видео», «сделай ролик», «space video», «видеоотчёт».
-- Закончилась серия задач (тесты прошли / нашли и починили баги / сделали миграцию) и нужно показать визуально, что произошло.
-- Особенно подходит, если в работе были «провалы и спасения» — они хорошо ложатся на `crash` → `rescue` сцены.
+- Пользователь просит «прислать отчёт в виде видео», «сделай ролик», «видеоотчёт».
+- Закончилась серия задач (тесты прошли, нашли и починили баги) и нужно показать визуально.
+- Особенно подходит для драматургии «провал → спасение» (`crash` → `rescue`).
 
 ## Требования к окружению
 
-- macOS (для `say`).
-- `ffmpeg` в PATH (`brew install ffmpeg`).
-- Python 3 с `Pillow` и `numpy` (`pip install Pillow numpy`).
+| Зависимость | Установка |
+|---|---|
+| `ffmpeg` | `brew install ffmpeg` |
+| Python 3 + Pillow + numpy | `python3 -m pip install --user --break-system-packages Pillow numpy` |
+| Piper TTS | `python3 -m pip install --user --break-system-packages piper-tts` |
+| Голосовая модель | см. ниже |
+
+### Загрузка голосовой модели (один раз)
+
+Голосовая модель `ru_RU-irina-medium` (60 МБ) в репозитории не лежит — её нужно скачать в [`voices/`](voices/). Конфиг `*.onnx.json` (4 КБ) закоммичен.
+
+```bash
+cd agent/skills/space-video-reporter/voices
+curl -sL -o ru_RU-irina-medium.onnx \
+  https://huggingface.co/rhasspy/piper-voices/resolve/main/ru/ru_RU/irina/medium/ru_RU-irina-medium.onnx
+```
+
+Источник — официальные модели Piper на Hugging Face. Есть и другие русские голоса (`denis`, `dmitri`, `ruslan`) — поменяй имя модели в [scripts/render.py](scripts/render.py) (`PIPER_MODEL`).
+
+Если Piper или модель отсутствуют — скрипт автоматически падает на macOS `say -v Milena` (синтетика).
 
 ## Использование
 
@@ -37,40 +65,35 @@ description: |
 python3 agent/skills/space-video-reporter/scripts/render.py manifest.json report.mp4
 ```
 
-`manifest.json` — массив слайдов. Минимум для каждого: `kind` и `text`.
-
-```json
-[
-  { "kind": "launch",    "text": "Запускаем тестирование Todo-приложения" },
-  { "kind": "starfield", "text": "Развёрнуто двадцать пять API-тестов" },
-  { "kind": "crash",     "text": "Обнаружена угроза: контракт ошибок API расходился с тестами" },
-  { "kind": "rescue",    "text": "Угроза устранена: обновили скилл и AGENT.md" },
-  { "kind": "planet",    "text": "Все изменения готовы к коммиту" },
-  { "kind": "launch",    "text": "Миссия выполнена. До связи!" }
-]
-```
-
-Полный формат — см. [references/manifest_schema.md](references/manifest_schema.md).
+`manifest.json` — массив слайдов. Формат — см. [references/manifest_schema.md](references/manifest_schema.md).
 
 ## Виды сцен (`kind`)
 
-| kind | визуал | музыкальная роль |
+| kind | визуал | звук |
 |---|---|---|
-| `launch` | ракета поверх звёздного поля + земля внизу | начало / окончание |
-| `starfield` | чистое звёздное небо + туманность | информация, статистика |
-| `planet` | большая планета по центру | смысловая остановка, итоги |
-| `crash` | красная планета + взрыв + красный мерцающий fade | сообщение о проблеме / падении / баге |
-| `rescue` | ракета + зелёная планета (всё хорошо) | сообщение о фиксе / выходе из ситуации |
+| `launch` | ракета взмывает из-под планеты-Земли, тянется дым | низкий gulь + chirp-вуш |
+| `starfield` | дрейфующее звёздное поле, маленькая планета в углу | спокойный drone |
+| `planet` | большая вращающаяся планета по центру | спокойный drone |
+| `crash` | красная вращающаяся планета, тряска, белый flash, разлёт 900 частиц | boom + хвост падающей высоты |
+| `rescue` | ракета летит слева-направо к зелёной планете, дым | многоголосый chime + бас |
+
+## Производительность
+
+- 1920×1080 @ 30 fps. ~3660 кадров на 2-минутное видео.
+- ~5 минут рендера на M1/M2. На старых машинах — дольше.
+- Результат: `.mp4` весом 20–30 МБ.
 
 ## Как добавить новую сцену
 
-1. В `scripts/render.py` дописать функцию-рендер в `render_scene()` (новый `kind`).
-2. По желанию — особый ffmpeg-фильтр в `render_slide()`.
-3. Документировать в [references/manifest_schema.md](references/manifest_schema.md).
+1. В [`scripts/render.py`](scripts/render.py):
+   - дописать ветку в `prepare_scene()` (какие assets бейкать),
+   - дописать ветку в `render_frame()` (что компоновать каждый кадр),
+   - дописать ветку в `synth_sfx()` (своё звуковое оформление),
+   - если нужна анимация ракеты — добавить ветку в `rocket_position()`.
+2. Документировать в [`references/manifest_schema.md`](references/manifest_schema.md).
 
 ## Ограничения
 
 - Это процедурная анимация, а не генеративная (нет Sora/Runway). Стиль — стилизованный, не фотореалистичный.
-- Голос — macOS `say` (синтетический). Замена на ElevenLabs возможна, но не из коробки.
-- Финальное видео — 1920×1080 @ 30fps, H.264 + AAC, ~5–10 MB на 2 минуты.
-- Длительность каждого слайда = длина озвучки + 1 секунда (или явно заданный `duration`, который больше).
+- Piper-голоса — нейронные, но не идеальные: ударения в редких словах могут плыть. Латинские слова (`API`, `JSON`, `E2E`) Piper иногда читает по-русски, иногда побуквенно — пиши их кириллицей в тексте слайда, если важно (`A-P-I` → «эй-пи-ай»).
+- Цифры лучше писать словами («двадцать пять»), у Piper падежи по числам нестабильны.
