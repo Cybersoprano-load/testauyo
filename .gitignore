@@ -7,3 +7,14 @@ dist/
 *.log
 *.tsbuildinfo
 .claude/
+
+# Playwright / MCP scratch
+.playwright-mcp/
+e2e/test-results/
+e2e/playwright-report/
+
+# Ad-hoc screenshots
+todo-login.png
+
+# space-video-reporter intermediate frames/audio
+.space_video_work/
