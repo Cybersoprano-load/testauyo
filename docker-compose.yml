@@ -24,6 +24,9 @@ services:
     environment:
       DATABASE_URL: postgresql://todo:todo@db:5432/todo?schema=public
       NODE_ENV: production
+      # Cost фактор bcrypt. Для локального стека / тестов — 4 (быстрая регистрация).
+      # Для реального prod подними до 12 (см. backend/.env.example).
+      BCRYPT_ROUNDS: "4"
 
   frontend:
     build: ./frontend

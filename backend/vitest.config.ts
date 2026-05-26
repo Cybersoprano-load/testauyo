@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
-    testTimeout: 15000,
+    testTimeout: 5000,
     include: ["__tests__/**/*.test.ts"],
     exclude: ["node_modules", ".next"],
   },
