@@ -566,34 +566,33 @@ def narrate(text: str, out_wav: str) -> None:
 def synth_sfx(kind: str, dur: float, out_path: str) -> None:
     """Synthesise scene-specific SFX as M4A.
 
-    Uses ffmpeg lavfi only — no external samples. Frequency sweeps are built
-    with `aevalsrc='sin(2*PI*phase(t))'` because `sine=f=…` accepts only a
-    constant frequency.
+    Levels are kept low (peaks around -18..-15 dBFS) so the SFX sits *under*
+    the narration. The mixing step in render_slide adds sidechain ducking,
+    so SFX dips further whenever the voice is talking.
     """
     if kind == "launch":
-        # Low rumble (sine 55Hz + brown noise) + chirped whoosh 80 → 280 Hz
-        sweep_dur = min(dur, 3.0)
+        # Soft rumble + a single chirped whoosh only at the very start.
+        sweep_dur = min(dur, 2.0)
         whoosh = (
-            f"aevalsrc=exprs=sin(2*PI*(80*t+100*t*t)):"
+            f"aevalsrc=exprs=sin(2*PI*(70*t+80*t*t)):"
             f"d={sweep_dur},apad=pad_dur={dur}"
         )
         cmd = [
             "ffmpeg", "-y",
             "-f", "lavfi", "-i", f"sine=f=55:duration={dur}",
-            "-f", "lavfi", "-i", f"anoisesrc=duration={dur}:color=brown:amplitude=0.4",
+            "-f", "lavfi", "-i", f"anoisesrc=duration={dur}:color=brown:amplitude=0.18",
             "-f", "lavfi", "-i", whoosh,
             "-filter_complex",
-            "[0]volume=0.35[a];"
-            "[1]highpass=f=60,lowpass=f=380,volume=0.55[b];"
-            "[2]volume=0.25,highpass=f=180[c];"
-            "[a][b][c]amix=inputs=3:duration=longest,"
-            "aecho=0.7:0.5:60:0.3,acompressor",
+            "[0]volume=0.14[a];"
+            "[1]highpass=f=70,lowpass=f=320,volume=0.20[b];"
+            "[2]volume=eval=frame:volume='0.18*exp(-1.0*t)',highpass=f=160[c];"
+            "[a][b][c]amix=inputs=3:duration=longest,aecho=0.7:0.5:60:0.25",
             "-t", f"{dur:.3f}", "-c:a", "aac", "-b:a", "160k",
             out_path,
         ]
     elif kind == "crash":
+        # One short boom — then near-silence so it doesn't fight the voice.
         boom_t = 0.5
-        # Falling pitch tail 140 → 40 Hz over 1.5s
         debris = (
             f"aevalsrc=exprs=sin(2*PI*(140*t-33*t*t)):"
             f"d=1.5,apad=pad_dur={dur}"
@@ -601,17 +600,18 @@ def synth_sfx(kind: str, dur: float, out_path: str) -> None:
         cmd = [
             "ffmpeg", "-y",
             "-f", "lavfi", "-i", f"sine=f=45:duration={dur}",
-            "-f", "lavfi", "-i", f"anoisesrc=duration={dur}:color=brown:amplitude=0.9",
+            "-f", "lavfi", "-i", f"anoisesrc=duration={dur}:color=brown:amplitude=0.5",
             "-f", "lavfi", "-i", debris,
             "-filter_complex",
-            f"[0]volume=eval=frame:volume='if(lt(t,{boom_t}),0,1.0*exp(-1.8*(t-{boom_t})))',lowpass=f=120[a];"
-            f"[1]volume=eval=frame:volume='if(lt(t,{boom_t}),0,0.8*exp(-0.9*(t-{boom_t})))',highpass=f=80,lowpass=f=2200[b];"
-            f"[2]volume=eval=frame:volume='if(lt(t,{boom_t}),0,0.4*exp(-2.5*(t-{boom_t})))'[c];"
-            f"[a][b][c]amix=inputs=3,aecho=0.8:0.7:120:0.4,acompressor",
+            f"[0]volume=eval=frame:volume='if(lt(t,{boom_t}),0,0.5*exp(-1.8*(t-{boom_t})))',lowpass=f=120[a];"
+            f"[1]volume=eval=frame:volume='if(lt(t,{boom_t}),0,0.32*exp(-1.6*(t-{boom_t})))',highpass=f=80,lowpass=f=2200[b];"
+            f"[2]volume=eval=frame:volume='if(lt(t,{boom_t}),0,0.18*exp(-2.5*(t-{boom_t})))'[c];"
+            f"[a][b][c]amix=inputs=3,aecho=0.8:0.7:120:0.3",
             "-t", f"{dur:.3f}", "-c:a", "aac", "-b:a", "160k",
             out_path,
         ]
     elif kind == "rescue":
+        # Single chime burst at t≈0.2s, then gentle bass pad.
         cmd = [
             "ffmpeg", "-y",
             "-f", "lavfi", "-i", f"sine=f=523.25:duration={dur}",
@@ -619,22 +619,22 @@ def synth_sfx(kind: str, dur: float, out_path: str) -> None:
             "-f", "lavfi", "-i", f"sine=f=783.99:duration={dur}",
             "-f", "lavfi", "-i", f"sine=f=146.83:duration={dur}",
             "-filter_complex",
-            "[0]volume=eval=frame:volume='0.18*exp(-2.5*mod(t,1.6))'[c1];"
-            "[1]volume=eval=frame:volume='0.14*exp(-2.5*mod(t,1.6))'[c2];"
-            "[2]volume=eval=frame:volume='0.12*exp(-2.5*mod(t,1.6))'[c3];"
-            "[3]volume=0.10[d];"
-            "[c1][c2][c3][d]amix=inputs=4,aecho=0.8:0.9:600:0.5",
+            "[0]volume=eval=frame:volume='0.08*exp(-2.0*max(t-0.2,0))'[c1];"
+            "[1]volume=eval=frame:volume='0.06*exp(-2.0*max(t-0.2,0))'[c2];"
+            "[2]volume=eval=frame:volume='0.05*exp(-2.0*max(t-0.2,0))'[c3];"
+            "[3]volume=0.045[d];"
+            "[c1][c2][c3][d]amix=inputs=4,aecho=0.8:0.9:600:0.4",
             "-t", f"{dur:.3f}", "-c:a", "aac", "-b:a", "160k",
             out_path,
         ]
-    else:  # starfield / planet
+    else:  # starfield / planet — barely-there ambient
         cmd = [
             "ffmpeg", "-y",
             "-f", "lavfi", "-i", f"sine=f=110:duration={dur}",
             "-f", "lavfi", "-i", f"sine=f=164.81:duration={dur}",
             "-f", "lavfi", "-i", f"sine=f=246.94:duration={dur}",
             "-filter_complex",
-            "[0]volume=0.08[a];[1]volume=0.06[b];[2]volume=0.045[c];"
+            "[0]volume=0.035[a];[1]volume=0.028[b];[2]volume=0.022[c];"
             "[a][b][c]amix=inputs=3,lowpass=f=900,aecho=0.8:0.9:1100:0.3",
             "-t", f"{dur:.3f}", "-c:a", "aac", "-b:a", "160k",
             out_path,
@@ -680,8 +680,8 @@ def render_slide(slide: dict, idx: int, work_dir: Path) -> Path:
     synth_sfx(kind, dur, str(sfx_path))
 
     out_path = work_dir / f"slide_{idx:02d}.mp4"
-    # Mix narration + SFX, lower SFX while voice is talking via sidechain not used —
-    # SFX is already much quieter than voice via filter graph.
+    # Mix: voice on top, SFX sidechain-ducked by the voice. When the voice is
+    # talking, SFX is pulled down ~12 dB; when silent, SFX comes back up.
     subprocess.run([
         "ffmpeg", "-y",
         "-framerate", str(FPS),
@@ -689,7 +689,13 @@ def render_slide(slide: dict, idx: int, work_dir: Path) -> Path:
         "-i", str(narration_wav),
         "-i", str(sfx_path),
         "-filter_complex",
-        "[1:a]volume=1.0[v];[2:a]volume=0.55[s];[v][s]amix=inputs=2:duration=longest:normalize=0[a]",
+        # Voice — slight high-shelf boost, normalised level.
+        "[1:a]volume=1.6,highpass=f=85,acompressor=threshold=-22dB:ratio=2.5:attack=12:release=120,asplit=2[v][vkey];"
+        # SFX — already quiet from synth; duck it by voice via sidechain compressor.
+        "[2:a]volume=0.22[ss];"
+        "[ss][vkey]sidechaincompress=threshold=0.035:ratio=10:attack=10:release=350:makeup=1[sducked];"
+        # Final sum.
+        "[v][sducked]amix=inputs=2:duration=longest:normalize=0[a]",
         "-map", "0:v", "-map", "[a]",
         "-t", f"{dur:.3f}",
         "-c:v", "libx264", "-crf", "20", "-preset", "medium", "-pix_fmt", "yuv420p",
@@ -778,12 +784,7 @@ def main() -> int:
         slides.append(render_slide(slide, i, work_dir))
 
     print("Concatenating slides…", flush=True)
-    raw_path = work_dir / "raw.mp4"
-    concat_slides(slides, raw_path, work_dir)
-
-    total = media_duration(str(raw_path))
-    print(f"Adding music bed ({total:.1f}s)…", flush=True)
-    mix_music(raw_path, total, output_path)
+    concat_slides(slides, output_path, work_dir)
 
     final = media_duration(str(output_path))
     print(f"Done: {output_path} — {final:.1f}s")
